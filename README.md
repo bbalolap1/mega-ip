@@ -6,11 +6,11 @@ The app is not a conventional game. It is a programmable narrative sandbox where
 
 ## Features in Version 0.0
 
-- **Universe** page with Prime Reality, the Omniverse, Nana, the Abyss, divine realms, and important worlds.
-- **Chronicle** page for Ordos' ordered progression.
-- **Characters** page beginning with Ordos.
+- **Universe** page with a visual relationship map for Prime Reality, the Omniverse, Nana, the Abyss, divine realms, and important worlds.
+- **Chronicle** page for Ordos' ordered progression, grouped into readable narrative arcs instead of a flat developer list.
+- **Characters** page beginning with Ordos while clearly explaining that Ordos is the first loaded character, not the limit of the sandbox.
 - **Lore Editor** with explicit validation and save action. It does not autosave.
-- **Scene Viewer** for **Ordos' First Divine Decision**.
+- **Scene Viewer** for **Ordos' First Divine Decision**, presented as a storyboard with cast, panels, narration, provisional dialogue, and consequences.
 - **Branch Creator** that writes alternatives and experiments under `branches/` without overwriting canon lore.
 
 ## Install
@@ -54,6 +54,10 @@ Every lore entity must use one canon status:
 Version 0.0 includes initial files for Ordos, Nana, the Omniverse, the Abyss, Ordos' divinity, the first divine decision event, Ordos' main timeline, and the first scene.
 
 Unsettled material is marked `provisional` or `unresolved` rather than being silently completed.
+
+## UI direction
+
+Streamlit is used only as the Version 0.0 shell. The UI now emphasizes narrative cards, grouped arcs, storyboard panels, and creator-facing status language so the prototype feels closer to a narrative sandbox while still staying small and avoiding 3D.
 
 ## Version 0.1 ideas
 

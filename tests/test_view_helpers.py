@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app.models import LoreDocument
-from app.view_helpers import lore_counts, status_tone, timeline_stage
+from app.view_helpers import list_to_multiline, lore_counts, multiline_to_list, status_tone, timeline_stage
 
 
 def test_timeline_stage_groups_progression_without_changing_lore() -> None:
@@ -22,3 +22,8 @@ def test_lore_counts_only_counts_valid_documents() -> None:
 
 def test_status_tone_explains_unresolved_boundary() -> None:
     assert status_tone("unresolved") == "do not complete by invention"
+
+
+def test_template_textarea_list_helpers_round_trip() -> None:
+    assert list_to_multiline(["one", "two"]) == "one\ntwo"
+    assert multiline_to_list("one\n\n two ") == ["one", "two"]

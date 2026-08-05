@@ -10,11 +10,12 @@ from app.branch_engine import create_branch
 from app.canon_controller import is_selectable_canon_event, status_label
 from app.character_engine import character_documents, find_ordos
 from app.file_utils import list_markdown_files, read_text, write_text
+from app import simple_yaml as yaml
 from app.lore_parser import load_lore_documents, split_frontmatter, validate_frontmatter
 from app.scene_engine import first_scene, frontmatter_list
 from app.timeline_engine import get_main_timeline, timeline_steps
 from app.universe_navigator import universe_documents
-from app.view_helpers import lore_counts, status_tone, timeline_stage
+from app.view_helpers import list_to_multiline, lore_counts, multiline_to_list, status_tone, timeline_stage
 
 ROOT = Path(__file__).parent
 LORE_ROOT = ROOT / "lore"
@@ -72,11 +73,11 @@ def page_universe(documents: list) -> None:
     vision_note()
     st.markdown("### Reality scale")
     relationship_rows = [
-        ("Prime Reality", "context for", "Omniverse"),
-        ("Omniverse", "contains", "universes / realms / worlds"),
-        ("Nana", "is important world for", "Ordos' first divine decision"),
-        ("Abyss", "opposes through", "domination / endless consumption"),
-        ("Divine realms", "remain", "important but not fully settled"),
+        ("Prime Reality", "is", "everything at the highest named scope"),
+        ("Omniverse", "is", "another reality, not Prime Reality itself"),
+        ("Nana", "is a world containing", "divine realms"),
+        ("Abyss", "is a world with", "opposing philosophy and deeper future lore"),
+        ("Divine realms", "are part of", "Nana in Version 0.0"),
     ]
     for left, relation, right in relationship_rows:
         a, b, c = st.columns([1.2, 0.7, 1.5])
@@ -140,6 +141,7 @@ def page_characters(documents: list) -> None:
         fields = [
             ("Origin", frontmatter.get("origin")),
             ("Classification", frontmatter.get("classification")),
+            ("Birth context", frontmatter.get("birth_context")),
             ("Current domain", frontmatter.get("current_domain") or frontmatter.get("primary_domain")),
             ("Authority", frontmatter.get("authority")),
             ("Philosophy", frontmatter.get("philosophy")),
@@ -165,34 +167,94 @@ def page_characters(documents: list) -> None:
 
 
 def page_lore_editor() -> None:
-    hero("Lore Editor", "Raw Markdown editing with explicit save; no silent canon changes.")
+    hero("Lore Editor", "Template-first editing with raw Markdown available for deeper control.")
     files = list_markdown_files(LORE_ROOT)
     choices = {path.relative_to(ROOT).as_posix(): path for path in files}
     selected_label = st.selectbox("Markdown file", list(choices))
     selected_path = choices[selected_label]
     raw_content = read_text(selected_path, LORE_ROOT)
-    left, right = st.columns([1.25, 0.75])
-    with left:
-        edited = st.text_area("Raw Markdown", value=raw_content, height=560)
-    with right:
-        st.markdown("### Save rules")
-        st.write("- Edit only this selected Markdown file.")
-        st.write("- Validate frontmatter before writing.")
-        st.write("- Save only when the explicit button is pressed.")
-        st.write("- Keep canon, provisional, unresolved, alternatives, and experiments distinct.")
-    if st.button("Validate and save explicitly", type="primary"):
-        try:
-            frontmatter, _body = split_frontmatter(edited)
-            errors = validate_frontmatter(frontmatter)
+    try:
+        current_frontmatter, current_body = split_frontmatter(raw_content)
+    except Exception:
+        current_frontmatter, current_body = {}, raw_content
+
+    template_tab, raw_tab = st.tabs(["Template editor", "Raw Markdown / advanced"])
+    with template_tab:
+        st.markdown("Use the template for common lore fields. Switch to raw Markdown only when you need full control.")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            lore_id = st.text_input("ID", value=str(current_frontmatter.get("id", "")))
+            lore_type = st.text_input("Type", value=str(current_frontmatter.get("type", "")))
+            lore_status = st.selectbox(
+                "Status",
+                ["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"],
+                index=["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"].index(str(current_frontmatter.get("status", "canon")))
+                if str(current_frontmatter.get("status", "canon")) in ["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"]
+                else 0,
+            )
+            lore_name = st.text_input("Name", value=str(current_frontmatter.get("name", "")))
+        with col_b:
+            origin = st.text_input("Origin", value=str(current_frontmatter.get("origin", "")))
+            classification = st.text_input("Classification", value=str(current_frontmatter.get("classification", "")))
+            domain = st.text_input(
+                "Primary/current domain",
+                value=str(current_frontmatter.get("current_domain", current_frontmatter.get("primary_domain", ""))),
+            )
+            authority = st.text_input("Authority", value=str(current_frontmatter.get("authority", "")))
+
+        beliefs = st.text_area("Beliefs / list values", value=list_to_multiline(current_frontmatter.get("beliefs")), height=120)
+        linked_events = st.text_area("Linked events", value=list_to_multiline(current_frontmatter.get("linked_events")), height=90)
+        body = st.text_area("Markdown body", value=current_body, height=320)
+        st.caption("Empty optional template fields are omitted. Existing specialized fields remain editable in raw Markdown mode.")
+
+        if st.button("Save from template", type="primary"):
+            updated = dict(current_frontmatter)
+            updated.update({"id": lore_id, "type": lore_type, "status": lore_status, "name": lore_name})
+            optional_scalars = {"origin": origin, "classification": classification, "current_domain": domain, "authority": authority}
+            for key, value in optional_scalars.items():
+                if value.strip():
+                    updated[key] = value.strip()
+                else:
+                    updated.pop(key, None)
+            for key, value in {"beliefs": beliefs, "linked_events": linked_events}.items():
+                lines = multiline_to_list(value)
+                if lines:
+                    updated[key] = lines
+                else:
+                    updated.pop(key, None)
+            errors = validate_frontmatter(updated)
             if errors:
                 for error in errors:
                     st.error(error)
             else:
-                write_text(selected_path, edited, LORE_ROOT)
+                content = "---\n" + yaml.safe_dump(updated, sort_keys=False) + "---\n\n" + body.lstrip("\n")
+                write_text(selected_path, content, LORE_ROOT)
                 refresh_lore()
-                st.success(f"Saved {selected_label}.")
-        except Exception as exc:  # User-facing editor validation should catch readable failures.
-            st.error(f"Could not save: {exc}")
+                st.success(f"Saved {selected_label} from template.")
+
+    with raw_tab:
+        left, right = st.columns([1.25, 0.75])
+        with left:
+            edited = st.text_area("Raw Markdown", value=raw_content, height=560)
+        with right:
+            st.markdown("### Save rules")
+            st.write("- Edit only this selected Markdown file.")
+            st.write("- Validate frontmatter before writing.")
+            st.write("- Save only when the explicit button is pressed.")
+            st.write("- Keep canon, provisional, unresolved, alternatives, and experiments distinct.")
+        if st.button("Validate and save raw Markdown"):
+            try:
+                frontmatter, _body = split_frontmatter(edited)
+                errors = validate_frontmatter(frontmatter)
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    write_text(selected_path, edited, LORE_ROOT)
+                    refresh_lore()
+                    st.success(f"Saved {selected_label}.")
+            except Exception as exc:  # User-facing editor validation should catch readable failures.
+                st.error(f"Could not save: {exc}")
 
 
 def page_scene_viewer(documents: list) -> None:

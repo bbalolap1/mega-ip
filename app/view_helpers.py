@@ -38,3 +38,17 @@ def timeline_stage(order: int) -> str:
     if order <= 14:
         return "Civilization and cultivation"
     return "Unsettled horizon"
+
+
+def multiline_to_list(value: str) -> list[str]:
+    """Convert textarea lines into a clean YAML-friendly list."""
+    return [line.strip() for line in value.splitlines() if line.strip()]
+
+
+def list_to_multiline(value: object) -> str:
+    """Convert frontmatter list values into editable textarea text."""
+    if isinstance(value, list):
+        return "\n".join(str(item) for item in value)
+    if value is None:
+        return ""
+    return str(value)

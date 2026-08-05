@@ -68,3 +68,16 @@ Streamlit is used only as the Version 0.0 shell. The UI now emphasizes narrative
 - Add branch comparison views that show canon beside alternatives.
 - Add relationship links between characters, worlds, events, and philosophies.
 - Add optional placeholder images without changing lore canon.
+
+## Why the UI is split this way
+
+Version 0.0 uses six sidebar pages because each page protects a different part of the creator workflow:
+
+1. **Universe** answers “what exists and how is it related?”
+2. **Chronicle** answers “what happens in Ordos' current progression?”
+3. **Characters** answers “who is involved and what do they believe?”
+4. **Lore Editor** answers “how do I safely change the Markdown source?”
+5. **Scene Viewer** answers “how does one key moment read as a scene?”
+6. **Branch Creator** answers “how do I try a different premise without changing canon?”
+
+The Lore Editor has both a template editor and raw Markdown mode. The template handles common fields like `id`, `type`, `status`, `name`, `origin`, `classification`, domain, authority, beliefs, and linked events. Raw Markdown remains available because the Markdown files are still the source of truth.

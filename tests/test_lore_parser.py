@@ -30,6 +30,6 @@ def test_initial_lore_loads_without_validation_errors() -> None:
         "character.ordos",
         "world.nana",
         "cosmology.omniverse",
-        "cosmology.abyss",
+        "world.abyss",
         "scene.ordos-first-divine-decision",
     }

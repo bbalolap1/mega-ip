@@ -3,21 +3,21 @@ id: cosmology.omniverse
 type: cosmology
 status: provisional
 name: Omniverse
+relationship_to_prime_reality: another reality, not Prime Reality itself
 contains:
-  - Prime Reality
   - universes
   - realms
   - worlds
   - Nana
-  - divine realms
+  - Abyss
 ---
 
 # Omniverse
 
-The Omniverse is the largest navigable scale named in the foundation.
+The Omniverse is another reality rather than Prime Reality itself.
 
 Version 0.0 should visualize it simply and should not try to simulate the entire Omniverse at once.
 
 ## Prime Reality
 
-Prime Reality is shown as part of the initial Universe page, but its full structure remains unresolved.
+Prime Reality is everything at the highest named scope for the current prototype. Its full structure remains unresolved.

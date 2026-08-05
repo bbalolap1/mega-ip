@@ -4,6 +4,7 @@ type: character
 status: canon
 name: Ordos
 origin: Earth
+birth_context: reborn in Nana
 classification: Origin God
 current_domain: Order
 primary_domain: Order

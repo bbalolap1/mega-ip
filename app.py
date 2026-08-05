@@ -1,0 +1,355 @@
+"""Streamlit entry point for Mega IP Narrative Sandbox Version 0.0."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import streamlit as st
+
+from app.branch_engine import create_branch
+from app.canon_controller import is_selectable_canon_event, status_label
+from app.character_engine import character_documents, find_ordos
+from app.file_utils import list_markdown_files, read_text, write_text
+from app import simple_yaml as yaml
+from app.lore_parser import load_lore_documents, split_frontmatter, validate_frontmatter
+from app.scene_engine import first_scene, frontmatter_list
+from app.timeline_engine import get_main_timeline, timeline_steps
+from app.universe_navigator import universe_documents
+from app.view_helpers import list_to_multiline, lore_counts, multiline_to_list, status_tone, timeline_stage
+
+ROOT = Path(__file__).parent
+LORE_ROOT = ROOT / "lore"
+BRANCHES_ROOT = ROOT / "branches"
+PAGES = ["Universe", "Chronicle", "Characters", "Lore Editor", "Scene Viewer", "Branch Creator"]
+
+
+@st.cache_data(show_spinner=False)
+def cached_lore() -> list:
+    return load_lore_documents(LORE_ROOT)
+
+
+def refresh_lore() -> None:
+    cached_lore.clear()
+
+
+def apply_visual_theme() -> None:
+    """Apply lightweight CSS so Streamlit feels more like a narrative console."""
+    st.markdown(
+        """
+        <style>
+        .stApp { background: linear-gradient(180deg, #090b14 0%, #111827 42%, #0f172a 100%); color: #e5e7eb; }
+        [data-testid="stSidebar"] { background: #050816; border-right: 1px solid #334155; }
+        div[data-testid="stVerticalBlockBorderWrapper"] { border-color: rgba(148, 163, 184, .35); background: rgba(15, 23, 42, .58); }
+        .sandbox-hero { padding: 1.2rem 1.4rem; border: 1px solid rgba(125, 211, 252, .35); border-radius: 18px; background: radial-gradient(circle at top left, rgba(56, 189, 248, .22), rgba(15, 23, 42, .72)); margin-bottom: 1rem; }
+        .vision-note { padding: .85rem 1rem; border-left: 4px solid #fbbf24; background: rgba(251, 191, 36, .10); border-radius: 10px; margin-bottom: 1rem; }
+        .scene-panel { padding: 1rem; border-radius: 16px; border: 1px solid rgba(168, 85, 247, .40); background: linear-gradient(135deg, rgba(88, 28, 135, .26), rgba(15, 23, 42, .88)); min-height: 130px; }
+        .status-pill { display: inline-block; padding: .2rem .55rem; border-radius: 999px; background: rgba(34, 197, 94, .16); border: 1px solid rgba(34, 197, 94, .45); font-size: .82rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def hero(title: str, subtitle: str) -> None:
+    st.markdown(f'<div class="sandbox-hero"><h1>{title}</h1><p>{subtitle}</p></div>', unsafe_allow_html=True)
+
+
+def status_badge(status: str) -> None:
+    st.markdown(
+        f'<span class="status-pill">{status_label(status)} — {status_tone(status)}</span>',
+        unsafe_allow_html=True,
+    )
+
+
+def vision_note() -> None:
+    st.markdown(
+        '<div class="vision-note"><strong>Vision boundary:</strong> Version 0.0 is a first readable lens for the Mega IP Universe. It is not trying to be the full final interface, a combat game, or a generic RPG.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def page_universe(documents: list) -> None:
+    hero("Universe", "A visual-first cosmology map built from Markdown lore, not a 3D simulation yet.")
+    vision_note()
+    st.markdown("### Reality scale")
+    relationship_rows = [
+        ("Prime Reality", "is", "everything at the highest named scope"),
+        ("Omniverse", "is", "another reality, not Prime Reality itself"),
+        ("Nana", "is a world containing", "divine realms"),
+        ("Abyss", "is a world with", "opposing philosophy and deeper future lore"),
+        ("Divine realms", "are part of", "Nana in Version 0.0"),
+    ]
+    for left, relation, right in relationship_rows:
+        a, b, c = st.columns([1.2, 0.7, 1.5])
+        a.container(border=True).subheader(left)
+        b.markdown(f"<br><center>**{relation}**</center>", unsafe_allow_html=True)
+        c.container(border=True).write(right)
+
+    st.markdown("### Loaded lore cards")
+    for doc in universe_documents(documents):
+        with st.expander(f"{doc.name} — {status_label(doc.status)}", expanded=doc.name in {"Nana", "Omniverse", "Abyss"}):
+            status_badge(doc.status)
+            st.markdown(doc.body)
+            st.caption("Structured frontmatter derived from the Markdown source:")
+            st.json(doc.frontmatter, expanded=False)
+
+
+def page_chronicle(documents: list) -> None:
+    hero("Chronicle", "Ordos' progression grouped into readable narrative arcs instead of one flat list.")
+    timeline = get_main_timeline(documents)
+    steps = timeline_steps(timeline)
+    if not steps:
+        st.error("No valid Ordos main timeline found.")
+        return
+
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for step in steps:
+        grouped.setdefault(timeline_stage(int(step["order"])), []).append(step)
+
+    for stage, stage_steps in grouped.items():
+        st.markdown(f"## {stage}")
+        cols = st.columns(2)
+        for index, step in enumerate(stage_steps):
+            with cols[index % 2].container(border=True):
+                st.caption(f"Step {step['order']} · {status_label(step['status'])}")
+                st.subheader(step["title"])
+                st.write(step["summary"])
+                if step["status"] == "unresolved":
+                    st.warning("Intentionally unresolved: do not finalize by invention.")
+
+
+def page_characters(documents: list) -> None:
+    hero("Characters", "Ordos is the first loaded character, not the intended limit of the sandbox.")
+    st.info("Version 0.0 starts with Ordos because the foundation centers him. Future Markdown files can add Origin Gods, ascended gods, mortals, angels, and other entities without changing app code.")
+    characters = character_documents(documents)
+    ordos = find_ordos(documents)
+    if ordos is None:
+        st.error("Ordos was not found in lore/characters.")
+        return
+    selected_name = st.selectbox(
+        "Character",
+        [doc.name for doc in characters],
+        index=[doc.id for doc in characters].index(ordos.id),
+    )
+    selected = next(doc for doc in characters if doc.name == selected_name)
+    st.header(selected.name)
+    status_badge(selected.status)
+    frontmatter = selected.frontmatter
+    tabs = st.tabs(["Identity", "Beliefs", "Links", "Raw lore"])
+    with tabs[0]:
+        cols = st.columns(3)
+        fields = [
+            ("Origin", frontmatter.get("origin")),
+            ("Classification", frontmatter.get("classification")),
+            ("Birth context", frontmatter.get("birth_context")),
+            ("Current domain", frontmatter.get("current_domain") or frontmatter.get("primary_domain")),
+            ("Authority", frontmatter.get("authority")),
+            ("Philosophy", frontmatter.get("philosophy")),
+            ("Canon status", status_label(selected.status)),
+        ]
+        for index, (label, value) in enumerate(fields):
+            with cols[index % 3].container(border=True):
+                st.caption(label)
+                st.write(value or "Unresolved")
+    with tabs[1]:
+        for belief in frontmatter.get("beliefs", []):
+            st.container(border=True).write(belief)
+    with tabs[2]:
+        st.subheader("Linked events")
+        for event in frontmatter.get("linked_events", []):
+            st.write(f"- `{event}`")
+        st.subheader("Unresolved questions")
+        for question in frontmatter.get("unresolved_questions", []):
+            st.warning(question)
+    with tabs[3]:
+        st.markdown(selected.body)
+        st.json(frontmatter, expanded=False)
+
+
+def page_lore_editor() -> None:
+    hero("Lore Editor", "Template-first editing with raw Markdown available for deeper control.")
+    files = list_markdown_files(LORE_ROOT)
+    choices = {path.relative_to(ROOT).as_posix(): path for path in files}
+    selected_label = st.selectbox("Markdown file", list(choices))
+    selected_path = choices[selected_label]
+    raw_content = read_text(selected_path, LORE_ROOT)
+    try:
+        current_frontmatter, current_body = split_frontmatter(raw_content)
+    except Exception:
+        current_frontmatter, current_body = {}, raw_content
+
+    template_tab, raw_tab = st.tabs(["Template editor", "Raw Markdown / advanced"])
+    with template_tab:
+        st.markdown("Use the template for common lore fields. Switch to raw Markdown only when you need full control.")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            lore_id = st.text_input("ID", value=str(current_frontmatter.get("id", "")))
+            lore_type = st.text_input("Type", value=str(current_frontmatter.get("type", "")))
+            lore_status = st.selectbox(
+                "Status",
+                ["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"],
+                index=["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"].index(str(current_frontmatter.get("status", "canon")))
+                if str(current_frontmatter.get("status", "canon")) in ["canon", "provisional", "unresolved", "alternative", "experiment", "archived", "removed"]
+                else 0,
+            )
+            lore_name = st.text_input("Name", value=str(current_frontmatter.get("name", "")))
+        with col_b:
+            origin = st.text_input("Origin", value=str(current_frontmatter.get("origin", "")))
+            classification = st.text_input("Classification", value=str(current_frontmatter.get("classification", "")))
+            domain = st.text_input(
+                "Primary/current domain",
+                value=str(current_frontmatter.get("current_domain", current_frontmatter.get("primary_domain", ""))),
+            )
+            authority = st.text_input("Authority", value=str(current_frontmatter.get("authority", "")))
+
+        beliefs = st.text_area("Beliefs / list values", value=list_to_multiline(current_frontmatter.get("beliefs")), height=120)
+        linked_events = st.text_area("Linked events", value=list_to_multiline(current_frontmatter.get("linked_events")), height=90)
+        body = st.text_area("Markdown body", value=current_body, height=320)
+        st.caption("Empty optional template fields are omitted. Existing specialized fields remain editable in raw Markdown mode.")
+
+        if st.button("Save from template", type="primary"):
+            updated = dict(current_frontmatter)
+            updated.update({"id": lore_id, "type": lore_type, "status": lore_status, "name": lore_name})
+            optional_scalars = {"origin": origin, "classification": classification, "current_domain": domain, "authority": authority}
+            for key, value in optional_scalars.items():
+                if value.strip():
+                    updated[key] = value.strip()
+                else:
+                    updated.pop(key, None)
+            for key, value in {"beliefs": beliefs, "linked_events": linked_events}.items():
+                lines = multiline_to_list(value)
+                if lines:
+                    updated[key] = lines
+                else:
+                    updated.pop(key, None)
+            errors = validate_frontmatter(updated)
+            if errors:
+                for error in errors:
+                    st.error(error)
+            else:
+                content = "---\n" + yaml.safe_dump(updated, sort_keys=False) + "---\n\n" + body.lstrip("\n")
+                write_text(selected_path, content, LORE_ROOT)
+                refresh_lore()
+                st.success(f"Saved {selected_label} from template.")
+
+    with raw_tab:
+        left, right = st.columns([1.25, 0.75])
+        with left:
+            edited = st.text_area("Raw Markdown", value=raw_content, height=560)
+        with right:
+            st.markdown("### Save rules")
+            st.write("- Edit only this selected Markdown file.")
+            st.write("- Validate frontmatter before writing.")
+            st.write("- Save only when the explicit button is pressed.")
+            st.write("- Keep canon, provisional, unresolved, alternatives, and experiments distinct.")
+        if st.button("Validate and save raw Markdown"):
+            try:
+                frontmatter, _body = split_frontmatter(edited)
+                errors = validate_frontmatter(frontmatter)
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    write_text(selected_path, edited, LORE_ROOT)
+                    refresh_lore()
+                    st.success(f"Saved {selected_label}.")
+            except Exception as exc:  # User-facing editor validation should catch readable failures.
+                st.error(f"Could not save: {exc}")
+
+
+def page_scene_viewer(documents: list) -> None:
+    hero("Scene Viewer", "A storyboard-style reading of Ordos' First Divine Decision.")
+    scene = first_scene(documents)
+    if scene is None:
+        st.error("The first scene is missing.")
+        return
+    st.header(scene.name)
+    status_badge(scene.status)
+    st.info(f"Setting: {scene.frontmatter.get('setting', 'Unresolved')}")
+    st.markdown("### Cast")
+    cast_cols = st.columns(len(frontmatter_list(scene, "characters")) or 1)
+    for index, character in enumerate(frontmatter_list(scene, "characters")):
+        with cast_cols[index].container(border=True):
+            st.subheader(character)
+            st.caption("Loaded from scene frontmatter")
+
+    st.markdown("### Storyboard beats")
+    beats = frontmatter_list(scene, "beats")
+    for index, beat in enumerate(beats, start=1):
+        st.markdown(f'<div class="scene-panel"><strong>Panel {index}</strong><br>{beat}</div>', unsafe_allow_html=True)
+
+    tabs = st.tabs(["Narration", "Provisional Dialogue", "Consequences", "Source note"])
+    with tabs[0]:
+        for item in frontmatter_list(scene, "narration"):
+            st.container(border=True).write(item)
+    with tabs[1]:
+        st.warning("Dialogue here is placeholder/provisional, not final canon dialogue.")
+        for item in frontmatter_list(scene, "provisional_dialogue"):
+            st.container(border=True).write(item)
+    with tabs[2]:
+        for item in frontmatter_list(scene, "consequences"):
+            st.container(border=True).write(item)
+    with tabs[3]:
+        st.markdown(scene.body)
+
+
+def page_branch_creator(documents: list) -> None:
+    hero("Branch Creator", "Alternative-history creation that preserves canon files.")
+    st.write("Select a canon event, name a branch, and record the changed premise separately under `/branches`.")
+    events = [doc for doc in documents if is_selectable_canon_event(doc)]
+    if not events:
+        st.error("No canon events are available for branching.")
+        return
+    event_labels = {f"{doc.name} ({doc.id})": doc for doc in events}
+    selected_label = st.selectbox("Source canon event", list(event_labels))
+    selected_event = event_labels[selected_label]
+    with st.expander("Source canon event preview", expanded=True):
+        status_badge(selected_event.status)
+        st.markdown(selected_event.body)
+    branch_name = st.text_input("Branch name")
+    branch_type = st.radio("Branch type", ["alternative", "experiment"], horizontal=True)
+    changed_premise = st.text_area("Changed premise", height=180)
+    if st.button("Save branch separately", type="primary"):
+        try:
+            record = create_branch(selected_event, branch_name, branch_type, changed_premise, BRANCHES_ROOT)
+            st.success(f"Created branch {record.branch_id} at {record.path.relative_to(ROOT)}.")
+            st.info("The source canon event file was not overwritten.")
+        except Exception as exc:
+            st.error(f"Could not create branch: {exc}")
+
+
+def main() -> None:
+    st.set_page_config(page_title="Mega IP Narrative Sandbox", layout="wide")
+    apply_visual_theme()
+    st.sidebar.title("Mega IP Narrative Sandbox")
+    st.sidebar.caption("Version 0.0 · narrative lens")
+    page = st.sidebar.radio(
+        "Navigate",
+        PAGES,
+    )
+    documents = cached_lore()
+    invalid = [doc for doc in documents if not doc.is_valid]
+    if invalid:
+        st.sidebar.error(f"{len(invalid)} lore file(s) have validation errors.")
+    counts = lore_counts(documents)
+    st.sidebar.markdown("### Loaded lore")
+    for lore_type, count in sorted(counts.items()):
+        st.sidebar.caption(f"{lore_type}: {count}")
+    st.sidebar.caption("Markdown lore remains the source of truth.")
+
+    if page == "Universe":
+        page_universe(documents)
+    elif page == "Chronicle":
+        page_chronicle(documents)
+    elif page == "Characters":
+        page_characters(documents)
+    elif page == "Lore Editor":
+        page_lore_editor()
+    elif page == "Scene Viewer":
+        page_scene_viewer(documents)
+    else:
+        page_branch_creator(documents)
+
+
+if __name__ == "__main__":
+    main()

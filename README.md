@@ -35,6 +35,8 @@ streamlit run app.py
 python -m pytest
 ```
 
+The tests include a lightweight app smoke test that verifies the required Streamlit page wiring with a fake `streamlit` module. This does not replace running the real app, but it catches broken navigation in environments where Streamlit cannot be installed.
+
 ## Lore source of truth
 
 Lore lives in `lore/` as Markdown files with YAML frontmatter. Generated JSON or future databases are only derived forms and must not replace the Markdown source.

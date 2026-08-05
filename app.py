@@ -19,6 +19,7 @@ from app.view_helpers import lore_counts, status_tone, timeline_stage
 ROOT = Path(__file__).parent
 LORE_ROOT = ROOT / "lore"
 BRANCHES_ROOT = ROOT / "branches"
+PAGES = ["Universe", "Chronicle", "Characters", "Lore Editor", "Scene Viewer", "Branch Creator"]
 
 
 @st.cache_data(show_spinner=False)
@@ -262,7 +263,7 @@ def main() -> None:
     st.sidebar.caption("Version 0.0 · narrative lens")
     page = st.sidebar.radio(
         "Navigate",
-        ["Universe", "Chronicle", "Characters", "Lore Editor", "Scene Viewer", "Branch Creator"],
+        PAGES,
     )
     documents = cached_lore()
     invalid = [doc for doc in documents if not doc.is_valid]
